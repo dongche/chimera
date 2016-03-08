@@ -65,6 +65,11 @@ public class OpensslCipher implements Cipher {
     return props;
   }
 
+  @Override
+  public CipherType getType() {
+    return CipherType.OPENSSL;
+  }
+
   /**
    * Initializes the cipher with mode, key and iv.
    * @param mode {@link #ENCRYPT_MODE} or {@link #DECRYPT_MODE}

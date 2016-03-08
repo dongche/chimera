@@ -69,6 +69,11 @@ public class JceCipher implements Cipher {
     return props;
   }
 
+  @Override
+  public CipherType getType() {
+    return CipherType.JCE;
+  }
+
   /**
    * Initializes the cipher with mode, key and iv.
    * @param mode {@link #ENCRYPT_MODE} or {@link #DECRYPT_MODE}

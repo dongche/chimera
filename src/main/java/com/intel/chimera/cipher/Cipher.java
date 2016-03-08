@@ -45,6 +45,8 @@ public interface Cipher extends Closeable {
    */
   Properties getProperties();
 
+  CipherType getType();
+
   /**
    * Initializes the cipher with mode, key and iv.
    * @param mode {@link #ENCRYPT_MODE} or {@link #DECRYPT_MODE}
