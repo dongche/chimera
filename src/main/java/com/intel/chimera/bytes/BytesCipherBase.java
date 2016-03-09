@@ -17,8 +17,8 @@ public abstract class BytesCipherBase {
   /** the encryption / decryption cipher */
   protected Cipher cipher;
 
-  private ByteBuffer inBuffer;
-  private ByteBuffer outBuffer;
+  private ByteBuffer inBuffer = null;
+  private ByteBuffer outBuffer = null;
 
 
   /**
