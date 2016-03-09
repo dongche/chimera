@@ -43,7 +43,7 @@ public class BytesDecryptor extends BytesCipherBase {
    * @throws IOException
    */
   public byte[] update(byte[] input, int offset, int len) throws IOException {
-    adaptBuffer(input, offset, len, len);
+    adaptBuffer(input, offset, len);
     return updateOrDoFinalForByteArray(false);
   }
 
@@ -57,7 +57,7 @@ public class BytesDecryptor extends BytesCipherBase {
    * @throws IOException
    */
   public byte[] doFinal(byte[] input, int offset, int len) throws IOException {
-    adaptBuffer(input, offset, len, len);
+    adaptBuffer(input, offset, len);
     return updateOrDoFinalForByteArray(true);
   }
 }

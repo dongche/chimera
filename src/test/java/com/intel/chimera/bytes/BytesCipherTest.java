@@ -85,13 +85,13 @@ public class BytesCipherTest {
     outputBuffer.put(output);
     outputBuffer.flip();
 
-    ByteBuffer cipherTextBuffer = ByteBuffer.allocateDirect(input.length + 16);
+    ByteBuffer cipherTextBuffer = ByteBuffer.allocateDirect(input.length + encryptor.getCipherBlockSize());
     encryptor.doFinal(inputBuffer, cipherTextBuffer);
     inputBuffer.flip();
     cipherTextBuffer.flip();
     Assert.assertTrue(cipherTextBuffer.equals(outputBuffer));
 
-    ByteBuffer plainTextBuffer = ByteBuffer.allocateDirect(output.length);
+    ByteBuffer plainTextBuffer = ByteBuffer.allocateDirect(output.length + decryptor.getCipherBlockSize());
     decryptor.doFinal(cipherTextBuffer, plainTextBuffer);
     cipherTextBuffer.flip();
     plainTextBuffer.flip();

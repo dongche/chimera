@@ -74,15 +74,15 @@ public abstract class BytesCipherBase {
    * @param input the input byte array
    * @param offset the offset in input where the input starts
    * @param len the input length
-   * @param outLen the expected output length
    * @throws IOException
    */
-  protected void adaptBuffer(byte[] input, int offset, int len, int outLen) throws IOException {
+  protected void adaptBuffer(byte[] input, int offset, int len) throws IOException {
+    int outputLen = len + getCipherBlockSize();
     if (cipher.getType() == CipherType.JCE) {
       inBuffer = ByteBuffer.wrap(input, offset, len);
 
-      if (outBuffer == null || outBuffer.capacity() < outLen) {
-        outBuffer = ByteBuffer.allocate(outLen);
+      if (outBuffer == null || outBuffer.capacity() < outputLen) {
+        outBuffer = ByteBuffer.allocate(outputLen);
       } else {
         outBuffer.clear();
       }
@@ -95,8 +95,8 @@ public abstract class BytesCipherBase {
       inBuffer.put(input, offset, len);
       inBuffer.flip();
 
-      if (outBuffer == null || outBuffer.capacity() < outLen) {
-        outBuffer = ByteBuffer.allocateDirect(outLen);
+      if (outBuffer == null || outBuffer.capacity() < outputLen) {
+        outBuffer = ByteBuffer.allocateDirect(outputLen);
       } else {
         outBuffer.clear();
       }

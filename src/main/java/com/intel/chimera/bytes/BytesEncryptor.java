@@ -43,7 +43,7 @@ public class BytesEncryptor extends BytesCipherBase {
    * @throws IOException
    */
   public byte[] update(byte[] input, int offset, int len) throws IOException {
-    adaptBuffer(input, offset, len, len + getCipherBlockSize());
+    adaptBuffer(input, offset, len);
     return updateOrDoFinalForByteArray(false);
   }
 
@@ -58,7 +58,7 @@ public class BytesEncryptor extends BytesCipherBase {
    * @throws IOException
    */
   public byte[] doFinal(byte[] input, int offset, int len) throws IOException {
-    adaptBuffer(input, offset, len, len + getCipherBlockSize());
+    adaptBuffer(input, offset, len);
     return updateOrDoFinalForByteArray(true);
   }
 }
