@@ -20,6 +20,8 @@ package com.intel.chimera.cipher;
 
 import java.nio.ByteBuffer;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.util.Random;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.ShortBufferException;
 
@@ -112,5 +114,88 @@ public class OpensslCipherTest extends AbstractCipherTest {
     } catch (IllegalArgumentException e) {
       Assert.assertTrue(e.getMessage().contains("Direct buffer is required"));
     }
+  }
+
+  @Test
+  public void testByteArray() throws Exception {
+    Random random = new SecureRandom();
+    int[] dataLenList = new int[] {3 * 1024, 4 * 1024, 5 * 1024, 5 * 1024 + 16};
+    byte[] plainText;
+
+    // check doFinal method on data set with different length.
+    for (CipherTransformation transformation : transformations) {
+      for (int dataLen : dataLenList) {
+        plainText = new byte[dataLen];
+        random.nextBytes(plainText);
+
+        resetCipher(transformation, key, iv);
+        byte[] cipherText = enc.doFinal(plainText, 0, plainText.length);
+        byte[] realPlainText = dec.doFinal(cipherText, 0, cipherText.length);
+        Assert.assertArrayEquals("byte array error.", plainText, realPlainText);
+      }
+    }
+
+    // check (update + doFinal) on data block composed of the whole data set
+    int totalDataLen = 0;
+    for (int dataLen : dataLenList) {
+      totalDataLen += dataLen;
+    }
+
+    for (CipherTransformation transformation : transformations) {
+      resetCipher(transformation, key, iv);
+
+      byte[] totalPlainText = new byte[totalDataLen];
+      int plainCursor = 0;
+      byte[] totalCipherText = new byte[totalDataLen + 100];
+      int cipherCursor = 0;
+
+      // encrypt n - 1 piece of data set
+      for (int i = 0; i < dataLenList.length - 1; i ++) {
+        plainText = new byte[dataLenList[i]];
+        random.nextBytes(plainText);
+        byte[] cipherText = enc.update(plainText, 0, plainText.length);
+
+        System.arraycopy(plainText, 0, totalPlainText, plainCursor, plainText.length);
+        System.arraycopy(cipherText, 0, totalCipherText, cipherCursor, cipherText.length);
+
+        plainCursor += plainText.length;
+        cipherCursor += cipherText.length;
+      }
+
+      // encrypt last piece
+      plainText = new byte[dataLenList[dataLenList.length - 1]];
+      random.nextBytes(plainText);
+      byte[] cipherText = enc.doFinal(plainText, 0, plainText.length);
+
+      System.arraycopy(plainText, 0, totalPlainText, plainCursor, plainText.length);
+      System.arraycopy(cipherText, 0, totalCipherText, cipherCursor, cipherText.length);
+      cipherCursor += cipherText.length;
+
+      // decrypt n - 1 10K bytes
+      int tmpOffset = 0;
+      int tmpCursor = 0;
+      int tenKB = 10 * 1024;
+      byte[] realPlainText;
+      byte[] realTotalPlainText = new byte[totalDataLen];
+      for (int i = 0; i < cipherCursor / tenKB; i ++) {
+        realPlainText = dec.update(totalCipherText, tmpOffset, tenKB);
+        System.arraycopy(realPlainText, 0, realTotalPlainText, tmpCursor, realPlainText.length);
+
+        tmpCursor += realPlainText.length;
+        tmpOffset += tenKB;
+      }
+
+      // decrypt last piece
+      realPlainText = dec.doFinal(totalCipherText, tmpOffset, cipherCursor % tenKB);
+      System.arraycopy(realPlainText, 0, realTotalPlainText, tmpCursor, realPlainText.length);
+
+      // verify
+      Assert.assertArrayEquals("big byte array error",totalPlainText, realTotalPlainText);
+    }
+  }
+
+  @Test
+  public void testNotDirectBuffer() throws Exception {
+
   }
 }

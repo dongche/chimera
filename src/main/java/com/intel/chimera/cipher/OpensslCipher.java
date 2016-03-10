@@ -36,8 +36,10 @@ public class OpensslCipher implements Cipher {
   private final CipherTransformation transformation;
   private final Openssl cipher;
 
-  private ByteBuffer inBuffer = null;
-  private ByteBuffer outBuffer = null;
+  // TODO(dong): make it configurable?
+  private static final int BUFFER_SIZE = 4 * 1024;
+  private ByteBuffer inDirectBuffer = null;
+  private ByteBuffer outDirectBuffer = null;
 
   /**
    * Constructs a {@link com.intel.chimera.cipher.Cipher} using JNI into OpenSSL
@@ -99,6 +101,7 @@ public class OpensslCipher implements Cipher {
   @Override
   public int update(ByteBuffer inBuffer, ByteBuffer outBuffer)
       throws ShortBufferException {
+    // TODO(dong): handle non direct ByteBuffer
     return cipher.update(inBuffer, outBuffer);
   }
 
@@ -113,31 +116,75 @@ public class OpensslCipher implements Cipher {
    */
   @Override
   public byte[] update(byte[] input, int offset, int len) {
-    int outputLen = len + transformation.getAlgorithmBlockSize();
-    if (inBuffer == null || inBuffer.capacity() < len) {
-      inBuffer = ByteBuffer.allocateDirect(len);
-    } else {
-      inBuffer.clear();
+    if (inDirectBuffer == null) {
+      inDirectBuffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
     }
-    inBuffer.put(input, offset, len);
-    inBuffer.flip();
+    if (outDirectBuffer == null) {
+      outDirectBuffer = ByteBuffer.allocateDirect(BUFFER_SIZE + transformation.getAlgorithmBlockSize());
+    }
 
-    if (outBuffer == null || outBuffer.capacity() < outputLen) {
-      outBuffer = ByteBuffer.allocateDirect(outputLen);
-    } else {
-      outBuffer.clear();
+    int estimatedOutputLen = estimateUpdateOutputSize(len);
+    byte[] estimatedOutput = new byte[estimatedOutputLen];
+    int outputLen = 0;
+    byte[] output = null;
+    int cursor = 0;
+
+    // loop to update BUFFER_SIZE block
+    while (len > BUFFER_SIZE) {
+      updateSlice(input, offset, BUFFER_SIZE);
+
+      int outputSliceLength = outDirectBuffer.remaining();
+      outDirectBuffer.get(estimatedOutput, cursor, outputSliceLength);
+
+      cursor += outputSliceLength;
+      len -= BUFFER_SIZE;
+      offset += BUFFER_SIZE;
     }
+
+    // handle the last piece of block
+    updateSlice(input, offset, len);
+    int outputSliceLength = outDirectBuffer.remaining();
+    outputLen = cursor + outputSliceLength;
+
+    if (outputLen == estimatedOutputLen) {
+      outDirectBuffer.get(estimatedOutput, cursor, outputSliceLength);
+      output = estimatedOutput;
+    } else {
+      output = new byte[outputLen];
+      System.arraycopy(estimatedOutput, 0, output, 0, cursor);
+      outDirectBuffer.get(output, cursor, outputSliceLength);
+    }
+
+    return output;
+  }
+
+  private int estimateUpdateOutputSize(int inputSize) {
+    /**
+     * TODO(dong): The output size differ a lot based on
+     * 1. transformation mode
+     * 2. encryption or decryption
+     * The size should be estimated case by case.
+     *
+     * For simplicity now, use input size, which is the max possible value.
+     */
+
+    return inputSize;
+  }
+
+  private void updateSlice(byte[] input, int offset, int len) {
+    inDirectBuffer.clear();
+    inDirectBuffer.put(input, offset, len);
+    inDirectBuffer.flip();
+
+    outDirectBuffer.clear();
 
     try {
-      update(inBuffer, outBuffer);
+      update(inDirectBuffer, outDirectBuffer);
     } catch (ShortBufferException e) {
-
+      // this cannot happen.
     }
 
-    outBuffer.flip();
-    byte[] output = new byte[outBuffer.remaining()];
-    outBuffer.get(output);
-    return output;
+    outDirectBuffer.flip();
   }
 
   /**
@@ -162,6 +209,7 @@ public class OpensslCipher implements Cipher {
   public int doFinal(ByteBuffer inBuffer, ByteBuffer outBuffer)
       throws ShortBufferException, IllegalBlockSizeException,
       BadPaddingException {
+    // TODO(dong): handle non direct ByteBuffer
     int n = cipher.update(inBuffer, outBuffer);
     return n + cipher.doFinal(outBuffer);
   }
@@ -186,31 +234,68 @@ public class OpensslCipher implements Cipher {
   @Override
   public byte[] doFinal(byte[] input, int offset, int len)
       throws IllegalBlockSizeException, BadPaddingException {
-    int outputLen = len + transformation.getAlgorithmBlockSize();
-    if (inBuffer == null || inBuffer.capacity() < len) {
-      inBuffer = ByteBuffer.allocateDirect(len);
-    } else {
-      inBuffer.clear();
+    if (inDirectBuffer == null) {
+      inDirectBuffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
     }
-    inBuffer.put(input, offset, len);
-    inBuffer.flip();
+    if (outDirectBuffer == null) {
+      outDirectBuffer = ByteBuffer.allocateDirect(BUFFER_SIZE + transformation.getAlgorithmBlockSize());
+    }
 
-    if (outBuffer == null || outBuffer.capacity() < outputLen) {
-      outBuffer = ByteBuffer.allocateDirect(outputLen);
-    } else {
-      outBuffer.clear();
+    int estimatedOutputLen = estimateFinalOutputSize(len);
+    byte[] estimatedOutput = new byte[estimatedOutputLen];
+    int outputLen = 0;
+    byte[] output = null;
+    int cursor = 0;
+
+    // loop to update BUFFER_SIZE block
+    while (len > BUFFER_SIZE) {
+      updateSlice(input, offset, BUFFER_SIZE);
+
+      int outputSliceLength = outDirectBuffer.remaining();
+      outDirectBuffer.get(estimatedOutput, cursor, outputSliceLength);
+
+      cursor += outputSliceLength;
+      len -= BUFFER_SIZE;
+      offset += BUFFER_SIZE;
     }
+
+    // handle the last piece of block
+    inDirectBuffer.clear();
+    inDirectBuffer.put(input, offset, len);
+    inDirectBuffer.flip();
+
+    outDirectBuffer.clear();
 
     try {
-      doFinal(inBuffer, outBuffer);
+      doFinal(inDirectBuffer, outDirectBuffer);
     } catch (ShortBufferException e) {
-
+      // this cannot happen.
     }
 
-    outBuffer.flip();
-    byte[] output = new byte[outBuffer.remaining()];
-    outBuffer.get(output);
+    outDirectBuffer.flip();
+
+    int outputSliceLength = outDirectBuffer.remaining();
+    outputLen = cursor + outputSliceLength;
+
+    if (outputLen == estimatedOutputLen) {
+      outDirectBuffer.get(estimatedOutput, cursor, outputSliceLength);
+      output = estimatedOutput;
+    } else {
+      output = new byte[outputLen];
+      System.arraycopy(estimatedOutput, 0, output, 0, cursor);
+      outDirectBuffer.get(output, cursor, outputSliceLength);
+    }
+
     return output;
+  }
+
+  private int estimateFinalOutputSize(int inputSize) {
+    /**
+     * TODO(dong): the same problem as {@link OpensslCipher#estimateUpdateOutputSize(int)}
+     *
+     * For simplicity now, use input size plus block size, which is the max possible value.
+     */
+    return inputSize + transformation.getAlgorithmBlockSize();
   }
 
   /**

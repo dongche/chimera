@@ -79,7 +79,7 @@ public abstract class AbstractCipherTest {
         outputBufferHeap.flip();
 
         byteBufferTest(tran, key, iv, inputBuffer, outputBuffer, true);
-        byteBufferTest(tran, key, iv, inputBufferHeap, outputBufferHeap, false);
+        //byteBufferTest(tran, key, iv, inputBufferHeap, outputBufferHeap, false);
         byteArrayTest(tran, key, iv, inputBytes, outputBytes);
       }
     }
@@ -142,7 +142,7 @@ public abstract class AbstractCipherTest {
     Assert.assertArrayEquals("byte array decryption error.", input, plainText);
   }
 
-  private void resetCipher(CipherTransformation transformation, byte[] key, byte[] iv) {
+  protected void resetCipher(CipherTransformation transformation, byte[] key, byte[] iv) {
     enc = getCipher(transformation);
     dec = getCipher(transformation);
 
@@ -159,7 +159,7 @@ public abstract class AbstractCipherTest {
     }
   }
 
-  private Cipher getCipher(CipherTransformation transformation) {
+  protected Cipher getCipher(CipherTransformation transformation) {
     try {
       return (Cipher) ReflectionUtils
           .newInstance(ReflectionUtils.getClassByName(cipherClass), props,
