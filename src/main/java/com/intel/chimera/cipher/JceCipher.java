@@ -69,11 +69,6 @@ public class JceCipher implements Cipher {
     return props;
   }
 
-  @Override
-  public CipherType getType() {
-    return CipherType.JCE;
-  }
-
   /**
    * Initializes the cipher with mode, key and iv.
    * @param mode {@link #ENCRYPT_MODE} or {@link #DECRYPT_MODE}
@@ -116,6 +111,20 @@ public class JceCipher implements Cipher {
   }
 
   /**
+   * Continues a multiple-part encryption/decryption operation. The data
+   * is encrypted or decrypted, depending on how this cipher was initialized.
+   *
+   * @param input the input byte array
+   * @param offset the offset in input where the input starts
+   * @param len the input length
+   * @return the new encrypted/decrypted byte array.
+   */
+  @Override
+  public byte[] update(byte[] input, int offset, int len) {
+    return cipher.update(input, offset, len);
+  }
+
+  /**
    * Encrypts or decrypts data in a single-part operation, or finishes a
    * multiple-part operation. The data is encrypted or decrypted, depending
    * on how this cipher was initialized.
@@ -138,6 +147,29 @@ public class JceCipher implements Cipher {
       throws ShortBufferException, IllegalBlockSizeException,
       BadPaddingException {
     return cipher.doFinal(inBuffer, outBuffer);
+  }
+
+  /**
+   * Encrypts or decrypts data in a single-part operation, or finishes a
+   * multiple-part operation.
+   *
+   * @param input the input byte array
+   * @param offset the offset in input where the input starts
+   * @param len the input length
+   * @return the new encrypted/decrypted byte array
+   * @throws BadPaddingException if this cipher is in decryption mode,
+   * and (un)padding has been requested, but the decrypted data is not
+   * bounded by the appropriate padding bytes
+   * @throws IllegalBlockSizeException if this cipher is a block cipher,
+   * no padding has been requested (only in encryption mode), and the total
+   * input length of the data processed by this cipher is not a multiple of
+   * block size; or if this encryption algorithm is unable to
+   * process the input data provided.
+   */
+  @Override
+  public byte[] doFinal(byte[] input, int offset, int len)
+      throws IllegalBlockSizeException, BadPaddingException {
+    return cipher.doFinal(input, offset, len);
   }
 
   /**

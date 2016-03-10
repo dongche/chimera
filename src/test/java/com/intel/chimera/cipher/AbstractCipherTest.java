@@ -39,6 +39,8 @@ public abstract class AbstractCipherTest {
   String cipherClass = null;
   CipherTransformation[] transformations = null;
 
+  Cipher enc, dec;
+
   @Before
   public void setup() {
     init();
@@ -56,46 +58,46 @@ public abstract class AbstractCipherTest {
     for (CipherTransformation tran : transformations) {
       cipherTests = TestData.getTestData(tran);
       for (int i = 0; i != cipherTests.length; i += 5) {
-        byte[] inputBytes =
-            DatatypeConverter.parseHexBinary(cipherTests[i + 3]);
-        byte[] outputBytes =
-            DatatypeConverter.parseHexBinary(cipherTests[i + 4]);
+        byte[] key = DatatypeConverter.parseHexBinary(cipherTests[i + 1]);
+        byte[] iv = DatatypeConverter.parseHexBinary(cipherTests[i + 2]);
+
+        byte[] inputBytes = DatatypeConverter.parseHexBinary(cipherTests[i + 3]);
+        byte[] outputBytes = DatatypeConverter.parseHexBinary(cipherTests[i + 4]);
+
         ByteBuffer inputBuffer = ByteBuffer.allocateDirect(inputBytes.length);
         ByteBuffer outputBuffer = ByteBuffer.allocateDirect(outputBytes.length);
         inputBuffer.put(inputBytes);
         inputBuffer.flip();
         outputBuffer.put(outputBytes);
         outputBuffer.flip();
-        byteBufferTest(tran,
-            DatatypeConverter.parseHexBinary(cipherTests[i + 1]),
-            DatatypeConverter.parseHexBinary(cipherTests[i + 2]), inputBuffer,
-            outputBuffer);
+
+        ByteBuffer inputBufferHeap = ByteBuffer.allocate(inputBytes.length);
+        ByteBuffer outputBufferHeap = ByteBuffer.allocate(outputBytes.length);
+        inputBufferHeap.put(inputBytes);
+        inputBufferHeap.flip();
+        outputBufferHeap.put(outputBytes);
+        outputBufferHeap.flip();
+
+        byteBufferTest(tran, key, iv, inputBuffer, outputBuffer, true);
+        byteBufferTest(tran, key, iv, inputBufferHeap, outputBufferHeap, false);
+        byteArrayTest(tran, key, iv, inputBytes, outputBytes);
       }
     }
   }
 
-  private void byteBufferTest(CipherTransformation transformation, byte[] key,
-                              byte[] iv,
-                                ByteBuffer input, ByteBuffer output) throws
+  private void byteBufferTest(CipherTransformation transformation, byte[] key, byte[] iv,
+      ByteBuffer input, ByteBuffer output, boolean isDirect) throws
       GeneralSecurityException, IOException {
-    ByteBuffer decResult = ByteBuffer.allocateDirect(BYTEBUFFER_SIZE);
-    ByteBuffer encResult = ByteBuffer.allocateDirect(BYTEBUFFER_SIZE);
-    Cipher enc, dec;
-
-    enc = getCipher(transformation);
-    dec = getCipher(transformation);
-
-    try {
-      enc.init(Cipher.ENCRYPT_MODE, key, iv);
-    } catch (Exception e) {
-      Assert.fail("AES failed initialisation - " + e.toString());
+    ByteBuffer decResult, encResult;
+    if (isDirect) {
+      encResult = ByteBuffer.allocateDirect(BYTEBUFFER_SIZE);
+      decResult = ByteBuffer.allocateDirect(BYTEBUFFER_SIZE);
+    } else {
+      encResult = ByteBuffer.allocate(BYTEBUFFER_SIZE);
+      decResult = ByteBuffer.allocate(BYTEBUFFER_SIZE);
     }
 
-    try {
-      dec.init(Cipher.DECRYPT_MODE, key, iv);
-    } catch (Exception e) {
-      Assert.fail("AES failed initialisation - " + e.toString());
-    }
+    resetCipher(transformation, key, iv);
 
     //
     // encryption pass
@@ -126,6 +128,34 @@ public abstract class AbstractCipherTest {
       input.get(inArray);
       decResult.get(decResultArray);
       Assert.fail();
+    }
+  }
+
+  private void byteArrayTest(CipherTransformation transformation, byte[] key,
+      byte[] iv, byte[] input, byte[] output) throws GeneralSecurityException {
+    resetCipher(transformation, key, iv);
+
+    byte[] cipherText = enc.doFinal(input, 0, input.length);
+    Assert.assertArrayEquals("byte array encryption error.", output, cipherText);
+
+    byte[] plainText = dec.doFinal(cipherText, 0, cipherText.length);
+    Assert.assertArrayEquals("byte array decryption error.", input, plainText);
+  }
+
+  private void resetCipher(CipherTransformation transformation, byte[] key, byte[] iv) {
+    enc = getCipher(transformation);
+    dec = getCipher(transformation);
+
+    try {
+      enc.init(Cipher.ENCRYPT_MODE, key, iv);
+    } catch (Exception e) {
+      Assert.fail("AES failed initialisation - " + e.toString());
+    }
+
+    try {
+      dec.init(Cipher.DECRYPT_MODE, key, iv);
+    } catch (Exception e) {
+      Assert.fail("AES failed initialisation - " + e.toString());
     }
   }
 

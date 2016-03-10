@@ -36,6 +36,9 @@ public class OpensslCipher implements Cipher {
   private final CipherTransformation transformation;
   private final Openssl cipher;
 
+  private ByteBuffer inBuffer = null;
+  private ByteBuffer outBuffer = null;
+
   /**
    * Constructs a {@link com.intel.chimera.cipher.Cipher} using JNI into OpenSSL
    * @param props properties for OpenSSL cipher
@@ -63,11 +66,6 @@ public class OpensslCipher implements Cipher {
   @Override
   public Properties getProperties() {
     return props;
-  }
-
-  @Override
-  public CipherType getType() {
-    return CipherType.OPENSSL;
   }
 
   /**
@@ -105,6 +103,44 @@ public class OpensslCipher implements Cipher {
   }
 
   /**
+   * Continues a multiple-part encryption/decryption operation. The data
+   * is encrypted or decrypted, depending on how this cipher was initialized.
+   *
+   * @param input the input byte array
+   * @param offset the offset in input where the input starts
+   * @param len the input length
+   * @return the new encrypted/decrypted byte array.
+   */
+  @Override
+  public byte[] update(byte[] input, int offset, int len) {
+    int outputLen = len + transformation.getAlgorithmBlockSize();
+    if (inBuffer == null || inBuffer.capacity() < len) {
+      inBuffer = ByteBuffer.allocateDirect(len);
+    } else {
+      inBuffer.clear();
+    }
+    inBuffer.put(input, offset, len);
+    inBuffer.flip();
+
+    if (outBuffer == null || outBuffer.capacity() < outputLen) {
+      outBuffer = ByteBuffer.allocateDirect(outputLen);
+    } else {
+      outBuffer.clear();
+    }
+
+    try {
+      update(inBuffer, outBuffer);
+    } catch (ShortBufferException e) {
+
+    }
+
+    outBuffer.flip();
+    byte[] output = new byte[outBuffer.remaining()];
+    outBuffer.get(output);
+    return output;
+  }
+
+  /**
    * Encrypts or decrypts data in a single-part operation, or finishes a
    * multiple-part operation. The data is encrypted or decrypted, depending
    * on how this cipher was initialized.
@@ -128,6 +164,53 @@ public class OpensslCipher implements Cipher {
       BadPaddingException {
     int n = cipher.update(inBuffer, outBuffer);
     return n + cipher.doFinal(outBuffer);
+  }
+
+  /**
+   * Encrypts or decrypts data in a single-part operation, or finishes a
+   * multiple-part operation.
+   *
+   * @param input the input byte array
+   * @param offset the offset in input where the input starts
+   * @param len the input length
+   * @return the new encrypted/decrypted byte array
+   * @throws BadPaddingException if this cipher is in decryption mode,
+   * and (un)padding has been requested, but the decrypted data is not
+   * bounded by the appropriate padding bytes
+   * @throws IllegalBlockSizeException if this cipher is a block cipher,
+   * no padding has been requested (only in encryption mode), and the total
+   * input length of the data processed by this cipher is not a multiple of
+   * block size; or if this encryption algorithm is unable to
+   * process the input data provided.
+   */
+  @Override
+  public byte[] doFinal(byte[] input, int offset, int len)
+      throws IllegalBlockSizeException, BadPaddingException {
+    int outputLen = len + transformation.getAlgorithmBlockSize();
+    if (inBuffer == null || inBuffer.capacity() < len) {
+      inBuffer = ByteBuffer.allocateDirect(len);
+    } else {
+      inBuffer.clear();
+    }
+    inBuffer.put(input, offset, len);
+    inBuffer.flip();
+
+    if (outBuffer == null || outBuffer.capacity() < outputLen) {
+      outBuffer = ByteBuffer.allocateDirect(outputLen);
+    } else {
+      outBuffer.clear();
+    }
+
+    try {
+      doFinal(inBuffer, outBuffer);
+    } catch (ShortBufferException e) {
+
+    }
+
+    outBuffer.flip();
+    byte[] output = new byte[outBuffer.remaining()];
+    outBuffer.get(output);
+    return output;
   }
 
   /**
