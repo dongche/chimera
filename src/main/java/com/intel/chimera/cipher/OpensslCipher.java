@@ -165,10 +165,10 @@ public class OpensslCipher implements Cipher {
      * 2. encryption or decryption
      * The size should be estimated case by case.
      *
-     * For simplicity now, use input size, which is the max possible value.
+     * For simplicity now, use downward aligned input size, which covers the most.
      */
 
-    return inputSize;
+    return inputSize - inputSize % transformation.getAlgorithmBlockSize();
   }
 
   private void updateSlice(byte[] input, int offset, int len) {
@@ -293,9 +293,10 @@ public class OpensslCipher implements Cipher {
     /**
      * TODO(dong): the same problem as {@link OpensslCipher#estimateUpdateOutputSize(int)}
      *
-     * For simplicity now, use input size plus block size, which is the max possible value.
+     * For simplicity now, use upward aligned input size, which cover the most.
      */
-    return inputSize + transformation.getAlgorithmBlockSize();
+    return inputSize - inputSize % transformation.getAlgorithmBlockSize()
+        + transformation.getAlgorithmBlockSize();
   }
 
   /**
