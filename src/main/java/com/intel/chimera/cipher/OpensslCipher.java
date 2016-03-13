@@ -36,10 +36,9 @@ public class OpensslCipher implements Cipher {
   private final CipherTransformation transformation;
   private final Openssl cipher;
 
-  // TODO(dong): make it configurable?
-  private static final int BUFFER_SIZE = 4 * 1024;
-  private ByteBuffer inDirectBuffer = null;
-  private ByteBuffer outDirectBuffer = null;
+  private int bufferSize;
+  private ByteBuffer inBuffer = null;
+  private ByteBuffer outBuffer = null;
 
   /**
    * Constructs a {@link com.intel.chimera.cipher.Cipher} using JNI into OpenSSL
@@ -51,6 +50,7 @@ public class OpensslCipher implements Cipher {
       throws GeneralSecurityException {
     this.props = props;
     this.transformation = transformation;
+    this.bufferSize = Utils.getCipherBufferSize(props);
 
     String loadingFailureReason = Openssl.getLoadingFailureReason();
     if (loadingFailureReason != null) {
@@ -92,17 +92,16 @@ public class OpensslCipher implements Cipher {
   /**
    * Continues a multiple-part encryption/decryption operation. The data
    * is encrypted or decrypted, depending on how this cipher was initialized.
-   * @param inBuffer the input ByteBuffer
-   * @param outBuffer the output ByteBuffer
+   * @param input the input ByteBuffer
+   * @param output the output ByteBuffer
    * @return int number of bytes stored in <code>output</code>
    * @throws ShortBufferException if there is insufficient space
    * in the output buffer
    */
   @Override
-  public int update(ByteBuffer inBuffer, ByteBuffer outBuffer)
+  public int update(ByteBuffer input, ByteBuffer output)
       throws ShortBufferException {
-    // TODO(dong): handle non direct ByteBuffer
-    return cipher.update(inBuffer, outBuffer);
+    return cipher.update(input, output);
   }
 
   /**
@@ -116,83 +115,23 @@ public class OpensslCipher implements Cipher {
    */
   @Override
   public byte[] update(byte[] input, int offset, int len) {
-    if (inDirectBuffer == null) {
-      inDirectBuffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
-    }
-    if (outDirectBuffer == null) {
-      outDirectBuffer = ByteBuffer.allocateDirect(BUFFER_SIZE + transformation.getAlgorithmBlockSize());
-    }
-
-    int estimatedOutputLen = estimateUpdateOutputSize(len);
-    byte[] estimatedOutput = new byte[estimatedOutputLen];
-    int outputLen = 0;
     byte[] output = null;
-    int cursor = 0;
-
-    // loop to update BUFFER_SIZE block
-    while (len > BUFFER_SIZE) {
-      updateSlice(input, offset, BUFFER_SIZE);
-
-      int outputSliceLength = outDirectBuffer.remaining();
-      outDirectBuffer.get(estimatedOutput, cursor, outputSliceLength);
-
-      cursor += outputSliceLength;
-      len -= BUFFER_SIZE;
-      offset += BUFFER_SIZE;
-    }
-
-    // handle the last piece of block
-    updateSlice(input, offset, len);
-    int outputSliceLength = outDirectBuffer.remaining();
-    outputLen = cursor + outputSliceLength;
-
-    if (outputLen == estimatedOutputLen) {
-      outDirectBuffer.get(estimatedOutput, cursor, outputSliceLength);
-      output = estimatedOutput;
-    } else {
-      output = new byte[outputLen];
-      System.arraycopy(estimatedOutput, 0, output, 0, cursor);
-      outDirectBuffer.get(output, cursor, outputSliceLength);
-    }
-
-    return output;
-  }
-
-  private int estimateUpdateOutputSize(int inputSize) {
-    /**
-     * TODO(dong): The output size differ a lot based on
-     * 1. transformation mode
-     * 2. encryption or decryption
-     * The size should be estimated case by case.
-     *
-     * For simplicity now, use downward aligned input size, which covers the most.
-     */
-
-    return inputSize - inputSize % transformation.getAlgorithmBlockSize();
-  }
-
-  private void updateSlice(byte[] input, int offset, int len) {
-    inDirectBuffer.clear();
-    inDirectBuffer.put(input, offset, len);
-    inDirectBuffer.flip();
-
-    outDirectBuffer.clear();
-
     try {
-      update(inDirectBuffer, outDirectBuffer);
-    } catch (ShortBufferException e) {
+      output = updateOrDoFinal(input, offset, len, false);
+    } catch (IllegalBlockSizeException ibse) {
+      // this cannot happen.
+    } catch (BadPaddingException bpe) {
       // this cannot happen.
     }
-
-    outDirectBuffer.flip();
+    return output;
   }
 
   /**
    * Encrypts or decrypts data in a single-part operation, or finishes a
    * multiple-part operation. The data is encrypted or decrypted, depending
    * on how this cipher was initialized.
-   * @param inBuffer the input ByteBuffer
-   * @param outBuffer the output ByteBuffer
+   * @param input the input ByteBuffer
+   * @param output the output ByteBuffer
    * @return int number of bytes stored in <code>output</code>
    * @throws BadPaddingException if this cipher is in decryption mode,
    * and (un)padding has been requested, but the decrypted data is not
@@ -206,12 +145,11 @@ public class OpensslCipher implements Cipher {
    * to hold the result
    */
   @Override
-  public int doFinal(ByteBuffer inBuffer, ByteBuffer outBuffer)
+  public int doFinal(ByteBuffer input, ByteBuffer output)
       throws ShortBufferException, IllegalBlockSizeException,
       BadPaddingException {
-    // TODO(dong): handle non direct ByteBuffer
-    int n = cipher.update(inBuffer, outBuffer);
-    return n + cipher.doFinal(outBuffer);
+    int n = cipher.update(input, output);
+    return n + cipher.doFinal(output);
   }
 
   /**
@@ -234,69 +172,7 @@ public class OpensslCipher implements Cipher {
   @Override
   public byte[] doFinal(byte[] input, int offset, int len)
       throws IllegalBlockSizeException, BadPaddingException {
-    if (inDirectBuffer == null) {
-      inDirectBuffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
-    }
-    if (outDirectBuffer == null) {
-      outDirectBuffer = ByteBuffer.allocateDirect(BUFFER_SIZE + transformation.getAlgorithmBlockSize());
-    }
-
-    int estimatedOutputLen = estimateFinalOutputSize(len);
-    byte[] estimatedOutput = new byte[estimatedOutputLen];
-    int outputLen = 0;
-    byte[] output = null;
-    int cursor = 0;
-
-    // loop to update BUFFER_SIZE block
-    while (len > BUFFER_SIZE) {
-      updateSlice(input, offset, BUFFER_SIZE);
-
-      int outputSliceLength = outDirectBuffer.remaining();
-      outDirectBuffer.get(estimatedOutput, cursor, outputSliceLength);
-
-      cursor += outputSliceLength;
-      len -= BUFFER_SIZE;
-      offset += BUFFER_SIZE;
-    }
-
-    // handle the last piece of block
-    inDirectBuffer.clear();
-    inDirectBuffer.put(input, offset, len);
-    inDirectBuffer.flip();
-
-    outDirectBuffer.clear();
-
-    try {
-      doFinal(inDirectBuffer, outDirectBuffer);
-    } catch (ShortBufferException e) {
-      // this cannot happen.
-    }
-
-    outDirectBuffer.flip();
-
-    int outputSliceLength = outDirectBuffer.remaining();
-    outputLen = cursor + outputSliceLength;
-
-    if (outputLen == estimatedOutputLen) {
-      outDirectBuffer.get(estimatedOutput, cursor, outputSliceLength);
-      output = estimatedOutput;
-    } else {
-      output = new byte[outputLen];
-      System.arraycopy(estimatedOutput, 0, output, 0, cursor);
-      outDirectBuffer.get(output, cursor, outputSliceLength);
-    }
-
-    return output;
-  }
-
-  private int estimateFinalOutputSize(int inputSize) {
-    /**
-     * TODO(dong): the same problem as {@link OpensslCipher#estimateUpdateOutputSize(int)}
-     *
-     * For simplicity now, use upward aligned input size, which cover the most.
-     */
-    return inputSize - inputSize % transformation.getAlgorithmBlockSize()
-        + transformation.getAlgorithmBlockSize();
+    return updateOrDoFinal(input, offset, len, true);
   }
 
   /**
@@ -305,5 +181,85 @@ public class OpensslCipher implements Cipher {
   @Override
   public void close() {
     cipher.clean();
+  }
+
+  private byte[] updateOrDoFinal(byte[] input, int offset, int len, boolean isFinal)
+      throws IllegalBlockSizeException, BadPaddingException {
+    allocateBuffer();
+
+    int tempLen = isFinal
+        ? len - len % transformation.getAlgorithmBlockSize() + transformation.getAlgorithmBlockSize()
+        : len - len % transformation.getAlgorithmBlockSize();;
+    byte[] temp = new byte[tempLen];
+
+    int cursor = consumeInput(input, offset, len, isFinal, temp);
+    return generateOutput(temp, cursor, tempLen);
+  }
+
+  private void allocateBuffer() {
+    if (inBuffer == null) {
+      inBuffer = ByteBuffer.allocateDirect(bufferSize);
+    }
+    if (outBuffer == null) {
+      outBuffer = ByteBuffer.allocateDirect(bufferSize + transformation.getAlgorithmBlockSize());
+    }
+  }
+
+  private int consumeInput(byte[] input, int offset, int len, boolean isFinal, byte[] output)
+      throws IllegalBlockSizeException, BadPaddingException {
+    int outputLen = 0;
+
+    // loop to update (len / bufferSize) blocks
+    while (len > bufferSize) {
+      updateData(input, offset, bufferSize, false);
+
+      int remaining = outBuffer.remaining();
+      outBuffer.get(output, outputLen, remaining);
+
+      outputLen += remaining;
+      len -= bufferSize;
+      offset += bufferSize;
+    }
+
+    // handle the last piece of block
+    updateData(input, offset, len, isFinal);
+    return outputLen;
+  }
+
+  private byte[] generateOutput(byte[] temp, int cursor, int tempLen) {
+    int remaining = outBuffer.remaining();
+    int outputLen = cursor + remaining;
+    byte[] output = null;
+
+    if (outputLen == tempLen) {
+      outBuffer.get(temp, cursor, remaining);
+      output = temp;
+    } else {
+      output = new byte[outputLen];
+      System.arraycopy(temp, 0, output, 0, cursor);
+      outBuffer.get(output, cursor, remaining);
+    }
+    return output;
+  }
+
+  private void updateData(byte[] input, int offset, int len, boolean isFinal)
+      throws IllegalBlockSizeException, BadPaddingException {
+    inBuffer.clear();
+    inBuffer.put(input, offset, len);
+    inBuffer.flip();
+
+    outBuffer.clear();
+
+    try {
+      if (isFinal) {
+        doFinal(inBuffer, outBuffer);
+      } else {
+        update(inBuffer, outBuffer);
+      }
+    } catch (ShortBufferException e) {
+      // this cannot happen.
+    }
+
+    outBuffer.flip();
   }
 }

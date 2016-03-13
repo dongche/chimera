@@ -33,6 +33,9 @@ public class ConfigurationKeys {
       JceCipher.class.getName();
   public static final String CHIMERA_CRYPTO_CIPHER_JCE_PROVIDER_KEY =
       CONF_PREFIX + "cipher.jce.provider";
+  public static final String CHIMERA_CRYPTO_CIPHER_BUFFER_SIZE =
+      CONF_PREFIX + "cipher.buffer.size";
+  public static final int CHIMERA_CRYPTO_CIPHER_BUFFER_SIZE_DEFAULT = 4 * 1024;
 
   // security random related configuration keys
   public static final String CHIMERA_CRYPTO_SECURE_RANDOM_DEVICE_FILE_PATH_KEY =

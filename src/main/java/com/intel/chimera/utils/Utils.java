@@ -30,6 +30,8 @@ import com.intel.chimera.cipher.Cipher;
 import com.intel.chimera.cipher.CipherFactory;
 import com.intel.chimera.cipher.CipherTransformation;
 
+import static com.intel.chimera.conf.ConfigurationKeys.CHIMERA_CRYPTO_CIPHER_BUFFER_SIZE;
+import static com.intel.chimera.conf.ConfigurationKeys.CHIMERA_CRYPTO_CIPHER_BUFFER_SIZE_DEFAULT;
 import static com.intel.chimera.conf.ConfigurationKeys.CHIMERA_CRYPTO_STREAM_BUFFER_SIZE_DEFAULT;
 import static com.intel.chimera.conf.ConfigurationKeys.CHIMERA_CRYPTO_STREAM_BUFFER_SIZE_KEY;
 import static com.intel.chimera.conf.ConfigurationKeys.CHIMERA_CRYPTO_CIPHER_CLASSES_DEFAULT;
@@ -290,5 +292,19 @@ public class Utils {
       }
     }
     return res;
+  }
+
+  public static int getCipherBufferSize(Properties properties) {
+    String bufferSizeStr = properties.getProperty(
+        CHIMERA_CRYPTO_CIPHER_BUFFER_SIZE);
+    if (bufferSizeStr == null || bufferSizeStr.isEmpty()) {
+      bufferSizeStr = System
+          .getProperty(CHIMERA_CRYPTO_CIPHER_BUFFER_SIZE);
+    }
+    if (bufferSizeStr == null || bufferSizeStr.isEmpty()) {
+      return CHIMERA_CRYPTO_CIPHER_BUFFER_SIZE_DEFAULT;
+    } else {
+      return Integer.parseInt(bufferSizeStr);
+    }
   }
 }
