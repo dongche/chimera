@@ -189,7 +189,7 @@ public class OpensslCipher implements Cipher {
 
     int tempLen = isFinal
         ? len - len % transformation.getAlgorithmBlockSize() + transformation.getAlgorithmBlockSize()
-        : len - len % transformation.getAlgorithmBlockSize();;
+        : len - len % transformation.getAlgorithmBlockSize();
     byte[] temp = new byte[tempLen];
 
     int cursor = consumeInput(input, offset, len, isFinal, temp);
@@ -229,7 +229,7 @@ public class OpensslCipher implements Cipher {
   private byte[] generateOutput(byte[] temp, int cursor, int tempLen) {
     int remaining = outBuffer.remaining();
     int outputLen = cursor + remaining;
-    byte[] output = null;
+    byte[] output;
 
     if (outputLen == tempLen) {
       outBuffer.get(temp, cursor, remaining);
