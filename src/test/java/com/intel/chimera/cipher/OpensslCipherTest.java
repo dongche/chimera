@@ -193,9 +193,4 @@ public class OpensslCipherTest extends AbstractCipherTest {
       Assert.assertArrayEquals("big byte array error",totalPlainText, realTotalPlainText);
     }
   }
-
-  @Test
-  public void testNotDirectBuffer() throws Exception {
-
-  }
 }
