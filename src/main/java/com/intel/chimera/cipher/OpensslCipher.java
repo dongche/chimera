@@ -36,8 +36,11 @@ public class OpensslCipher implements Cipher {
   private final CipherTransformation transformation;
   private final Openssl cipher;
 
+  /** The size of buffer, which is used for byte array */
   private int bufferSize;
+  /** The buffer used for byte array input */
   private ByteBuffer inBuffer = null;
+  /** The buffer used for byte array output */
   private ByteBuffer outBuffer = null;
 
   /**
