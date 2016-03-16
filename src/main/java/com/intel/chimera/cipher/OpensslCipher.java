@@ -196,6 +196,11 @@ public class OpensslCipher implements Cipher {
 
   private byte[] updateOrDoFinal(byte[] input, int offset, int len, boolean isFinal)
       throws IllegalBlockSizeException, BadPaddingException, ShortBufferException {
+    // Input sanity check
+    if (input == null || offset < 0 || len < 0 || len > (input.length - offset)) {
+      throw new IllegalArgumentException("Bad arguments");
+    }
+
     allocateBuffer();
 
     final int blockSize = transformation.getAlgorithmBlockSize();
@@ -237,7 +242,9 @@ public class OpensslCipher implements Cipher {
     }
 
     // handle the last piece of block
-    updateData(input, offset, len, isFinal);
+    if (len > 0 || isFinal) {
+      updateData(input, offset, len, isFinal);
+    }
     return outputLen;
   }
 
