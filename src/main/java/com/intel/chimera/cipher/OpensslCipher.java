@@ -37,7 +37,7 @@ public class OpensslCipher implements Cipher {
   private final Openssl cipher;
 
   /** The size of buffer, which is used for byte array */
-  private int bufferSize;
+  private final int bufferSize;
   /** The buffer used for byte array input */
   private ByteBuffer inBuffer = null;
   /** The buffer used for byte array output */
@@ -125,6 +125,8 @@ public class OpensslCipher implements Cipher {
       // this cannot happen.
     } catch (BadPaddingException bpe) {
       // this cannot happen.
+    } catch (ShortBufferException sbe) {
+      // this cannot happen.
     }
     return output;
   }
@@ -175,7 +177,13 @@ public class OpensslCipher implements Cipher {
   @Override
   public byte[] doFinal(byte[] input, int offset, int len)
       throws IllegalBlockSizeException, BadPaddingException {
-    return updateOrDoFinal(input, offset, len, true);
+    byte[] output = null;
+    try {
+      output = updateOrDoFinal(input, offset, len, true);
+    } catch (ShortBufferException sbe) {
+      // this cannot happen.
+    }
+    return output;
   }
 
   /**
@@ -187,16 +195,15 @@ public class OpensslCipher implements Cipher {
   }
 
   private byte[] updateOrDoFinal(byte[] input, int offset, int len, boolean isFinal)
-      throws IllegalBlockSizeException, BadPaddingException {
+      throws IllegalBlockSizeException, BadPaddingException, ShortBufferException {
     allocateBuffer();
 
-    int tempLen = isFinal
-        ? len - len % transformation.getAlgorithmBlockSize() + transformation.getAlgorithmBlockSize()
-        : len - len % transformation.getAlgorithmBlockSize();
-    byte[] temp = new byte[tempLen];
+    final int blockSize = transformation.getAlgorithmBlockSize();
+    int bufferLen = isFinal ? len - len % blockSize + blockSize : len - len % blockSize;
+    byte[] buffer = new byte[bufferLen];
 
-    int cursor = consumeInput(input, offset, len, isFinal, temp);
-    return generateOutput(temp, cursor, tempLen);
+    int pos = updateInput(input, offset, len, isFinal, buffer);
+    return getOutput(buffer, pos, bufferLen);
   }
 
   private void allocateBuffer() {
@@ -208,8 +215,13 @@ public class OpensslCipher implements Cipher {
     }
   }
 
-  private int consumeInput(byte[] input, int offset, int len, boolean isFinal, byte[] output)
-      throws IllegalBlockSizeException, BadPaddingException {
+  /**
+   * Processes input and puts results into output.
+   * Firstly processes input blocks which are aligned with the buffer,
+   * and put results into output. Then processes the last block and put result into outBuffer.
+   */
+  private int updateInput(byte[] input, int offset, int len, boolean isFinal, byte[] output)
+      throws IllegalBlockSizeException, BadPaddingException, ShortBufferException {
     int outputLen = 0;
 
     // loop to update (len / bufferSize) blocks
@@ -229,38 +241,42 @@ public class OpensslCipher implements Cipher {
     return outputLen;
   }
 
-  private byte[] generateOutput(byte[] temp, int cursor, int tempLen) {
+  /**
+   * Gets output from buffer.
+   * If the data in outBuffer fits into buffer byte array, just fill the data and return.
+   * If not, a new byte array is created and filled with data in buffer and outBuffer.
+   */
+  private byte[] getOutput(byte[] buffer, int pos, int bufferLen) {
     int remaining = outBuffer.remaining();
-    int outputLen = cursor + remaining;
+    int outputLen = pos + remaining;
     byte[] output;
 
-    if (outputLen == tempLen) {
-      outBuffer.get(temp, cursor, remaining);
-      output = temp;
+    if (outputLen == bufferLen) {
+      outBuffer.get(buffer, pos, remaining);
+      output = buffer;
     } else {
       output = new byte[outputLen];
-      System.arraycopy(temp, 0, output, 0, cursor);
-      outBuffer.get(output, cursor, remaining);
+      System.arraycopy(buffer, 0, output, 0, pos);
+      outBuffer.get(output, pos, remaining);
     }
     return output;
   }
 
+  /**
+   * doFinal or update the data in input based on the flag.
+   */
   private void updateData(byte[] input, int offset, int len, boolean isFinal)
-      throws IllegalBlockSizeException, BadPaddingException {
+      throws IllegalBlockSizeException, BadPaddingException, ShortBufferException {
     inBuffer.clear();
     inBuffer.put(input, offset, len);
     inBuffer.flip();
 
     outBuffer.clear();
 
-    try {
-      if (isFinal) {
-        doFinal(inBuffer, outBuffer);
-      } else {
-        update(inBuffer, outBuffer);
-      }
-    } catch (ShortBufferException e) {
-      // this cannot happen.
+    if (isFinal) {
+      doFinal(inBuffer, outBuffer);
+    } else {
+      update(inBuffer, outBuffer);
     }
 
     outBuffer.flip();
